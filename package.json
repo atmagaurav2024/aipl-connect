@@ -1,7 +1,7 @@
 {
-  "name": "aipl-connect-server",
-  "version": "1.0.0",
-  "description": "AIPL Connect - WebRTC Signaling Server",
+  "name": "aipl-connect-v2",
+  "version": "2.0.0",
+  "description": "AIPL Connect - Direct Employee Calling App",
   "main": "server/server.js",
   "scripts": {
     "start": "node server/server.js",
@@ -14,7 +14,5 @@
   "devDependencies": {
     "nodemon": "^3.0.1"
   },
-  "engines": {
-    "node": ">=16.0.0"
-  }
+  "engines": { "node": ">=16.0.0" }
 }
