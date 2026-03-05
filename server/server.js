@@ -19,6 +19,13 @@ const onlineUsers = {};
 
 const REG_PASSWORD = 'Atmagaurav@123';
 
+// { employeeId -> sessionToken } — persists login across reconnects
+const sessionTokens = {};
+
+function generateToken() {
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
 function broadcastUserList() {
   const list = Object.values(onlineUsers).map(u => ({
     socketId: u.socketId,
@@ -26,6 +33,22 @@ function broadcastUserList() {
     name: u.name
   }));
   io.emit('user-list', list);
+}
+
+function loginUser(socket, employeeId, name) {
+  // Kick existing session if any
+  const existing = Object.values(onlineUsers).find(u => u.employeeId === employeeId);
+  if (existing) {
+    io.to(existing.socketId).emit('kicked', { message: 'Logged in from another device.' });
+    delete onlineUsers[existing.socketId];
+  }
+  // Generate and save session token
+  const token = generateToken();
+  sessionTokens[employeeId] = token;
+  onlineUsers[socket.id] = { socketId: socket.id, employeeId, name };
+  socket.emit('login-result', { success: true, user: { employeeId, name }, token });
+  broadcastUserList();
+  console.log(`Login: ${name} (${employeeId})`);
 }
 
 io.on('connection', (socket) => {
@@ -61,17 +84,19 @@ io.on('connection', (socket) => {
       socket.emit('login-result', { success: false, message: 'Employee ID not registered.' });
       return;
     }
-    // Check not already logged in from another socket
-    const existing = Object.values(onlineUsers).find(u => u.employeeId === employeeId);
-    if (existing) {
-      // Kick old session
-      io.to(existing.socketId).emit('kicked', { message: 'Logged in from another device.' });
-      delete onlineUsers[existing.socketId];
+    loginUser(socket, employeeId, user.name);
+  });
+
+  // ── AUTO LOGIN (using saved session token) ──
+  socket.on('auto-login', ({ employeeId, token }) => {
+    const savedToken = sessionTokens[employeeId];
+    const user = registeredUsers[employeeId];
+    if (!user || !savedToken || savedToken !== token) {
+      socket.emit('auto-login-result', { success: false });
+      return;
     }
-    onlineUsers[socket.id] = { socketId: socket.id, employeeId, name: user.name };
-    socket.emit('login-result', { success: true, user: { employeeId, name: user.name } });
-    broadcastUserList();
-    console.log(`Login: ${user.name} (${employeeId})`);
+    loginUser(socket, employeeId, user.name);
+    socket.emit('auto-login-result', { success: true, user: { employeeId, name: user.name } });
   });
 
   // ── DIRECT CALL SIGNALING ──

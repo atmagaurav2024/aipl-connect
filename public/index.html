@@ -471,6 +471,30 @@ const ICE_SERVERS = [
 ];
 
 // ══════════════════════════════════════
+// SESSION STORAGE (localStorage)
+// ══════════════════════════════════════
+function saveSession(employeeId, token) {
+  try {
+    localStorage.setItem('aipl_empid', employeeId);
+    localStorage.setItem('aipl_token', token);
+  } catch(e) {}
+}
+function loadSession() {
+  try {
+    return {
+      employeeId: localStorage.getItem('aipl_empid'),
+      token: localStorage.getItem('aipl_token')
+    };
+  } catch(e) { return {}; }
+}
+function clearSession() {
+  try {
+    localStorage.removeItem('aipl_empid');
+    localStorage.removeItem('aipl_token');
+  } catch(e) {}
+}
+
+// ══════════════════════════════════════
 // STATE
 // ══════════════════════════════════════
 let socket = null;
@@ -543,10 +567,23 @@ function connectSocket() {
     if (success) setTimeout(() => switchAuth('login'), 1500);
   });
 
-  socket.on('login-result', ({ success, message, user }) => {
+  socket.on('login-result', ({ success, message, user, token }) => {
     if (!success) { toast(message, 'error'); return; }
     me = user;
+    if (token) saveSession(user.employeeId, token);
     toast(`Welcome, ${me.name}! 👋`, 'success');
+    document.getElementById('myName').textContent = me.name;
+    document.getElementById('myAvatar').textContent = initials(me.name);
+    showScreen('home');
+  });
+
+  socket.on('auto-login-result', ({ success, user }) => {
+    if (!success) {
+      clearSession();
+      showScreen('auth');
+      return;
+    }
+    me = user;
     document.getElementById('myName').textContent = me.name;
     document.getElementById('myAvatar').textContent = initials(me.name);
     showScreen('home');
@@ -650,10 +687,27 @@ function doLogin() {
 
 function doLogout() {
   cleanupCall();
+  clearSession();
   if (socket) { socket.disconnect(); socket = null; }
   me = null; allUsers = [];
   showScreen('auth');
 }
+
+// ── AUTO LOGIN ON PAGE LOAD ──
+window.addEventListener('load', () => {
+  const { employeeId, token } = loadSession();
+  if (employeeId && token) {
+    // Show a loading state briefly
+    showScreen('auth');
+    connectSocket();
+    // Wait for socket connection then attempt auto-login
+    socket.on('connect', () => {
+      socket.emit('auto-login', { employeeId, token });
+    });
+  } else {
+    showScreen('auth');
+  }
+});
 
 // ══════════════════════════════════════
 // USER DIRECTORY
